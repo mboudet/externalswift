@@ -9,17 +9,12 @@
  * @copyright Brad Jones 2016
  */
 
-namespace OCA\ExternalSwift\AppInfo;
-
 use OCA\ExternalSwift\AppInfo\Application;
-use OC_App;
-use OC_Mount_Config;
 
 require_once __DIR__ . '/autoload.php';
 
-// TODO: Is this necessary?
 if (!class_exists('OC_Mount_Config')) {
-	OC_App::loadApp('files_external');
+  OC_App::loadApp('files_external');
 }
 
 $app = new Application();

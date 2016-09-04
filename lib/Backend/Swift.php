@@ -19,8 +19,9 @@
  *
  */
 
-namespace OCA\Files_External\Lib\Backend;
+namespace OCA\ExternalSwift\Backend;
 
+use OCA\Files_External\Lib\Backend\Backend;
 use \OCP\IL10N;
 use \OCA\Files_External\Lib\DefinitionParameter;
 use \OCA\Files_External\Lib\Auth\AuthMechanism;

@@ -2,7 +2,9 @@
 
 namespace OCA\ExternalSwift\AppInfo;
 
+use OC\Server;
 use OCA\Files_External\Lib\Config\IBackendProvider;
+use OCA\Files_External\Service\BackendService;
 use \OCP\AppFramework\App;
 use OCP\AppFramework\IAppContainer;
 
@@ -12,7 +14,7 @@ class Application extends App implements IBackendProvider {
    * @{inheritdoc}
    */
   public function __construct(array $urlParams = array()) {
-    parent::__construct('files_external', $urlParams);
+    parent::__construct('externalswift', $urlParams);
 
     $container = $this->getContainer();
 
@@ -20,14 +22,13 @@ class Application extends App implements IBackendProvider {
       return $c->getServer()->query('UserMountCache');
     });
 
-    $backendService = $container->query('OCA\\Files_External\\Service\\BackendService');
+    // We need to get the service off the files_external container.
+    /** @var Server $server */
+    $server = $container->getServer();
+    $filesContainer = $server->getAppContainer('files_external');
+    /** @var BackendService $backendService */
+    $backendService = $filesContainer->query('OCA\\Files_External\\Service\\BackendService');
     $backendService->registerBackendProvider($this);
-    $backendService->registerAuthMechanismProvider($this);
-
-    // app developers: do NOT depend on this! it will disappear with oC 9.0!
-    \OC::$server->getEventDispatcher()->dispatch(
-      'OCA\\Files_External::loadAdditionalBackends'
-    );
   }
 
   /**
