@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<info>
+    <id>externalswift</id>
+    <name>External Swift</name>
+    <description>My first ownCloud app</description>
+    <licence>AGPL</licence>
+    <author>Brad Jones</author>
+    <version>0.0.1</version>
+    <types>
+        <filesystem/>
+    </types>
+    <namespace>ExternalSwift</namespace>
+    <dependencies>
+        <owncloud min-version="9.0" />
+        <php min-version="7.0" />
+    </dependencies>
+    <website>https://github.com/BradJonesLLC/files_external_swift</website>
+    <bugs>https://github.com/BradJonesLLC/files_external_swift/issues</bugs>
+</info>
