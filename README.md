@@ -1,9 +1,9 @@
 # OneCloud OpenStack Swift integration with Keystone 3 support
 
 ## Installation
-Install this app in a custom location, per the [admin manual](https://doc.owncloud.org/server/9.1/admin_manual/installation/apps_management_installation.html#using-custom-app-directories)
+Install this app in a custom location, per the [admin manual](https://doc.owncloud.org/server/9.1/admin_manual/installation/apps_management_installation.html#using-custom-app-directories).
 
-Requires PHP 7. The official OneCloud Docker image does not support PHP 7,
+Requires PHP 7. The official OwnCloud Docker image does not support PHP 7,
 however there are [community images](https://hub.docker.com/r/bradjonesllc/docker-owncloud-php7/) available.
 
 ## Known issues
