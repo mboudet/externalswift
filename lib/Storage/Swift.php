@@ -38,15 +38,16 @@ namespace OCA\ExternalSwift\Storage;
 use Guzzle\Http\Exception\ClientErrorResponseException;
 use GuzzleHttp\Psr7\Stream;
 use Icewind\Streams\IteratorDirectory;
+use OC\Files\Storage\Common;
 use OpenStack\ObjectStore\v1\Models\Container;
 use OpenStack\ObjectStore\v1\Models\Object as SwiftObject;
 use OpenStack\ObjectStore\v1\Service;
 use OpenStack\OpenStack;
 
-class Swift extends \OC\Files\Storage\Common {
+class Swift extends Common {
 
 	/**
-	 * @var Service
+	 * @var Service./
 	 */
 	private $connection;
 	/**
@@ -96,13 +97,6 @@ class Swift extends \OC\Files\Storage\Common {
 	}
 
 	const SUBCONTAINER_FILE = '.subcontainers';
-
-	/**
-	 * translate directory path to container name
-	 *
-	 * @param string $path
-	 * @return string
-	 */
 
 	/**
 	 * Fetches an object from the API.
