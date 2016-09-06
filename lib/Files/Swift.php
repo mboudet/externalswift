@@ -2,8 +2,10 @@
 
 namespace OCA\ExternalSwift\Files;
 
+use GuzzleHttp\Psr7\Stream;
 use OCA\ExternalSwift\Storage\Swift as SwiftStorage;
 use OCP\Files\ObjectStore\IObjectStore;
+use OpenStack\ObjectStore\v1\Models\Object as SwiftObject;
 
 class Swift extends SwiftStorage implements IObjectStore {
 
@@ -43,7 +45,7 @@ class Swift extends SwiftStorage implements IObjectStore {
   public function writeObject($urn, $stream) {
     $this->getContainer()->createObject([
       'name' => $urn,
-      'stream' => $stream,
+      'stream' => new Stream($stream),
     ]);
   }
 
@@ -53,17 +55,13 @@ class Swift extends SwiftStorage implements IObjectStore {
    * @throws \Exception from openstack lib when something goes wrong
    */
   public function readObject($urn) {
+    /** @var SwiftObject $object */
     $object = $this->getContainer()->getObject($urn);
 
-    // we need to keep a reference to objectContent or
-    // the stream will be closed before we can do anything with it
-    /** @var $objectContent \Guzzle\Http\EntityBody * */
-    $objectContent = $object->getContent();
-    $objectContent->rewind();
+    $stream = $object->download()->detach();
 
-    $stream = $objectContent->getStream();
     // save the object content in the context of the stream to prevent it being gc'd until the stream is closed
-    stream_context_set_option($stream, 'swift','content', $objectContent);
+    stream_context_set_option($stream, 'swift', 'content', $object->retrieve());
 
     return $stream;
   }
