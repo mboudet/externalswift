@@ -2,13 +2,16 @@
     "name": "bradjonesllc/files_external_swift",
     "description": "Swift integration for OwnCloud with Keystone 3 support",
     "require": {
-        "php-opencloud/openstack": "^2.0",
+        "php-opencloud/openstack": "^3.0.4",
         "guzzlehttp/guzzle": "~6.1"
     },
     "authors": [
         {
             "name": "Brad Jones",
             "email": "brad@bradjonesllc.com"
+        },
+        {   "name": "Mateo Boudet",
+            "email": "mateo.boudet@irisa.fr"
         }
     ],
     "minimum-stability": "dev"

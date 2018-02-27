@@ -38,13 +38,12 @@ namespace OCA\ExternalSwift\Storage;
 use Guzzle\Http\Exception\ClientErrorResponseException;
 use GuzzleHttp\Psr7\Stream;
 use Icewind\Streams\IteratorDirectory;
-use OC\Files\Storage\Common;
 use OpenStack\ObjectStore\v1\Models\Container;
 use OpenStack\ObjectStore\v1\Models\Object as SwiftObject;
 use OpenStack\ObjectStore\v1\Service;
 use OpenStack\OpenStack;
 
-class Swift extends Common {
+class Swift extends \OCP\Files\Storage\StorageAdapter {
 
 	/**
 	 * @var Service./
@@ -71,7 +70,7 @@ class Swift extends Common {
 	/**
 	 * @var array
 	 */
-	private static $tmpFiles = array();
+	private static $tmpFiles = [];
 
 	/**
 	 * Key value cache mapping path to data object. Maps path to
@@ -113,15 +112,22 @@ class Swift extends Common {
 			// might be "false" if object did not exist from last check
 			return $this->objectCache->get($path);
 		}
+
+        if (! $this->getContainer()->objectExists($path) ) {
+            $this->objectCache->set($path, false);
+            return false;
+        }
+
 		try {
-			/** @var SwiftObject $object */
 			$object = $this->getContainer()->getObject($path);
 			$object->retrieve();
 			$this->objectCache->set($path, $object);
 			return $object;
-		} catch (\Throwable $e) {
-			// this exception happens when the object does not exist, which
-			// is expected in most cases
+
+		} catch (ClientErrorResponseException $e) {
+            /** Should not happen, 404 is tested for above */
+
+            \OCP\Util::writeLog('files_external', $e->getMessage(), \OCP\Util::ERROR);
 			$this->objectCache->set($path, false);
 			return false;
 		}
@@ -139,27 +145,20 @@ class Swift extends Common {
 	}
 
 	public function __construct($params) {
+
+/**
 		if ((empty($params['key']) and empty($params['password']))
 			or empty($params['user']) or empty($params['bucket'])
 			or empty($params['region'])
 		) {
 			throw new \Exception("API Key or password, Username, Bucket and Region have to be configured.");
 		}
-
+*/
 		$this->id = 'swift::' . $params['user'] . md5($params['bucket']);
 
 		$this->bucket = $params['bucket'];
 
-		if (empty($params['url'])) {
-			$params['url'] = 'https://identity.api.rackspacecloud.com/v2.0/';
-		}
-
-		if (empty($params['service_name'])) {
-			$params['service_name'] = 'cloudFiles';
-		}
-
 		$this->params = $params;
-		// FIXME: private class...
 		$this->objectCache = new \OC\Cache\CappedMemoryCache();
 	}
 
@@ -177,13 +176,13 @@ class Swift extends Common {
 		try {
 			$opts = [
 				'name' => $path,
-				'contentType' => 'httpd/unix-directory',
+				'content' => 'httpd/unix-directory',
 			];
 			$this->getContainer()->createObject($opts);
 			// invalidate so that the next access gets the real object
 			// with all properties
 			$this->objectCache->remove($path);
-		} catch (\Throwable $e) {
+		} catch (Exceptions\CreateUpdateError $e) {
 			\OCP\Util::writeLog('files_external', $e->getMessage(), \OCP\Util::ERROR);
 			return false;
 		}
@@ -202,11 +201,14 @@ class Swift extends Common {
 	}
 
 	public function rmdir($path) {
-		$path = $this->normalizePath($path);
 
+// Check last function : wrong version?
+		$path = $this->normalizePath($path);
+// isDeletable ? Check
 		if (!$this->is_dir($path) || !$this->isDeletable($path)) {
 			return false;
 		}
+// Remove every file in it.. could be more efficient
 
 		$dh = $this->opendir($path);
 		while ($file = readdir($dh)) {
@@ -222,9 +224,11 @@ class Swift extends Common {
 		}
 
 		try {
-			$this->getContainer()->dataObject()->setName($path . '/')->delete();
+// ? Why change its name before deletion?
+//			$this->getContainer()->dataObject()->setName($path . '/')->delete();
+            $this->getContainer()->getObject($path . '/')->delete();
 			$this->objectCache->remove($path . '/');
-		} catch (\Throwable $e) {
+		} catch (Exceptions\DeleteError $e) {
 			\OCP\Util::writeLog('files_external', $e->getMessage(), \OCP\Util::ERROR);
 			return false;
 		}
@@ -234,20 +238,18 @@ class Swift extends Common {
 
 	public function opendir($path) {
 		$path = $this->normalizePath($path);
-
-		if ($path === '.') {
-			$path = '';
-		} else {
-			$path .= '/';
-		}
-
+        if ($path === '.') {
+            $path = '';
+        } else {
+            $path .= '/';
+        }
 		$path = str_replace('%23', '#', $path); // the prefix is sent as a query param, so revert the encoding of #
 
 		try {
-			$files = array();
+			$files = [];
 			$objects = $this->getContainer()->listObjects(array(
-				'prefix' => $path,
-				'delimiter' => '/'
+		        'prefix' => $path,
+		        'delimiter' => '/'
 			));
 
 			/** @var SwiftObject $object */
@@ -267,6 +269,7 @@ class Swift extends Common {
 	}
 
 	public function stat($path) {
+
 		$path = $this->normalizePath($path);
 
 		if ($path === '.') {
@@ -298,7 +301,9 @@ class Swift extends Common {
 			$mtime = floor($objectMetadata['timestamp']);
 		}
 
-		$stat = array();
+		$stat = [];
+
+//Might be empty..
 		$stat['size'] = (int) $object->contentLength;
 		$stat['mtime'] = $mtime;
 		$stat['atime'] = time();
@@ -306,6 +311,7 @@ class Swift extends Common {
 	}
 
 	public function filetype($path) {
+
 		$path = $this->normalizePath($path);
 
 		if ($path !== '.' && $this->doesObjectExist($path)) {
@@ -322,6 +328,7 @@ class Swift extends Common {
 	}
 
 	public function unlink($path) {
+        \OCP\Util::writeLog('files_external', 'unlink called ' . $path , \OCP\Util::WARN);
 		$path = $this->normalizePath($path);
 
 		if ($this->is_dir($path)) {
@@ -336,25 +343,25 @@ class Swift extends Common {
 			if ($e->getCode() !== 404) {
 				\OCP\Util::writeLog('files_external', $e->getMessage(), \OCP\Util::ERROR);
 			}
+            \OCP\Util::writeLog('files_external', $e->getCode(), \OCP\Util::WARN); 
 			return false;
 		}
-
 		return true;
 	}
 
 	public function fopen($path, $mode) {
 		$path = $this->normalizePath($path);
-
 		switch ($mode) {
 			case 'r':
 			case 'rb':
-				try {
-					$c = $this->getContainer();
-					return $c->getObject($path)->download()->detach();
-				} catch (\Throwable $e) {
-					\OCP\Util::writeLog('files_external', $e->getMessage(), \OCP\Util::ERROR);
-					return false;
-				}
+                    \OCP\Util::writeLog('files_external', 'fopen rb' . $path , \OCP\Util::WARN);
+                try {
+                    $c = $this->getContainer();
+                    return $c->getObject($path)->download()->detach();
+                } catch (\Throwable $e) {
+                    \OCP\Util::writeLog('files_external', $e->getMessage(), \OCP\Util::ERROR);
+                    return false;
+                }
 			case 'w':
 			case 'wb':
 			case 'a':
@@ -367,45 +374,46 @@ class Swift extends Common {
 			case 'x+':
 			case 'c':
 			case 'c+':
-				if (strrpos($path, '.') !== false) {
-					$ext = substr($path, strrpos($path, '.'));
-				} else {
-					$ext = '';
-				}
-				$tmpFile = \OCP\Files::tmpFile($ext);
-				\OC\Files\Stream\Close::registerCallback($tmpFile, array($this, 'writeBack'));
-				// Fetch existing file if required
-				if ($mode[0] !== 'w' && $this->file_exists($path)) {
-					if ($mode[0] === 'x') {
-						// File cannot already exist
-						return false;
-					}
-					$source = $this->fopen($path, 'r');
-					file_put_contents($tmpFile, $source);
-					// Seek to end if required
-					if ($mode[0] === 'a') {
-						fseek($tmpFile, 0, SEEK_END);
-					}
-				}
-				self::$tmpFiles[$tmpFile] = $path;
 
-				return fopen('close://' . $tmpFile, $mode);
+                \OCP\Util::writeLog('files_external', 'fopen c+ ' . $path , \OCP\Util::WARN);
+                if (strrpos($path, '.') !== false) {
+                    $ext = substr($path, strrpos($path, '.'));
+                } else {
+                    $ext = '';
+                }
+                $tmpFile = \OCP\Files::tmpFile($ext);
+                \OC\Files\Stream\Close::registerCallback($tmpFile, array($this, 'writeBack'));
+                // Fetch existing file if required
+                if ($mode[0] !== 'w' && $this->file_exists($path)) {
+                    if ($mode[0] === 'x') {
+                        // File cannot already exist
+                        return false;
+                    }
+                    $source = $this->fopen($path, 'r');
+                    file_put_contents($tmpFile, $source);
+                    // Seek to end if required
+                    if ($mode[0] === 'a') {
+                        fseek($tmpFile, 0, SEEK_END);
+                    }
+                }
+                self::$tmpFiles[$tmpFile] = $path;
+                return fopen('close://' . $tmpFile, $mode);
 		}
 	}
 
 	public function touch($path, $mtime = null) {
+        \OCP\Util::writeLog('files_external', 'touch called ' . $path , \OCP\Util::WARN);
 		$path = $this->normalizePath($path);
 		if (is_null($mtime)) {
 			$mtime = time();
 		}
-		$metadata = array('timestamp' => $mtime);
+		$metadata = array('timestamp' => (string) $mtime);
 		if ($this->file_exists($path)) {
 			if ($this->is_dir($path) && $path != '.') {
 				$path .= '/';
 			}
-
 			$object = $this->fetchObject($path);
-			if ($object->saveMetadata($metadata)) {
+			if ($object->mergeMetadata($metadata)) {
 				// invalidate target object to force repopulation on fetch
 				$this->objectCache->remove($path);
 			}
@@ -416,6 +424,7 @@ class Swift extends Common {
 				'name' => $path,
 				'metadata' => $metadata,
 			];
+            \OCP\Util::writeLog('files_external', 'Trying to create file', \OCP\Util::ERROR);
 			$this->getContainer()->createObject($opts);
 			// invalidate target object to force repopulation on fetch
 			$this->objectCache->remove($path);
@@ -424,6 +433,9 @@ class Swift extends Common {
 	}
 
 	public function copy($path1, $path2) {
+
+        \OCP\Util::writeLog('files_external', 'copy called' , \OCP\Util::WARN);
+
 		$path1 = $this->normalizePath($path1);
 		$path2 = $this->normalizePath($path2);
 
@@ -476,11 +488,12 @@ class Swift extends Common {
 			//file does not exist
 			return false;
 		}
-
 		return true;
 	}
 
 	public function rename($path1, $path2) {
+        \OCP\Util::writeLog('files_external', 'rename called ' .$path1 . " " . $path2 , \OCP\Util::WARN);
+
 		$path1 = $this->normalizePath($path1);
 		$path2 = $this->normalizePath($path2);
 
@@ -519,35 +532,23 @@ class Swift extends Common {
 			return $this->connection;
 		}
 
-		$settings = array(
-			'username' => $this->params['user'],
-		);
+// for ease of test
+        $settings = [
+            'authUrl' => $this->params['region'],
+            'region' => $this->params['region'],
+            'user'    => [
+                'name' => $this->params['user'],
+                'password' => $this->params['password'],
+                'domain'   => ['id' => '0de861d3d0fc43eabf692d6dbb1cc257']
+            ],
+            'scope' => [
+                'project' => ['id' => 'e47a5557f1094e9f9932bc93b90dbc98']
+            ]
+        ];
 
-		if (!empty($this->params['password'])) {
-			$settings['password'] = $this->params['password'];
-		} else if (!empty($this->params['key'])) {
-			$settings['apiKey'] = $this->params['key'];
-		}
-
-		if (!empty($this->params['tenant'])) {
-			$settings['tenantName'] = $this->params['tenant'];
-		}
-
-		if (!empty($this->params['timeout'])) {
-			$settings['timeout'] = $this->params['timeout'];
-		}
-
-		$settings['authUrl'] = $this->params['url'];
-		// TODO - Rackspace-specific stuff as before?
-		// E.g., setting service_name to cloudFiles for Rackspace
 		$this->anchor = new OpenStack($settings);
 
-		// TODO - The username and passwords below seem a little redundant?
-		// There appears to be some difference between a username and a user ID for Keystone.
-		$connection = $this->anchor->objectStoreV1([
-			'region' => $this->params['region'],
-			'user' => ['id' => $settings['username'], 'password' => $settings['password']]
-		]);
+		$connection = $this->anchor->objectStoreV1();
 
 		$this->connection = $connection;
 
@@ -567,6 +568,7 @@ class Swift extends Common {
 		try {
 			$this->container = $this->getConnection()->getContainer($this->bucket);
 		} catch (ClientErrorResponseException $e) {
+// Maybe not..
 			$this->container = $this->getConnection()->createContainer($this->bucket);
 		}
 
@@ -578,14 +580,16 @@ class Swift extends Common {
 	}
 
 	public function writeBack($tmpFile) {
-		if (!isset(self::$tmpFiles[$tmpFile])) {
-			return false;
-		}
-		$stream = new Stream(fopen($tmpFile, 'r'));
-		$this->getContainer()->createObject(['name' => self::$tmpFiles[$tmpFile], 'stream' => $stream]);
-		$this->objectCache->remove(self::$tmpFiles[$tmpFile]);
-		unlink($tmpFile);
-	}
+
+        \OCP\Util::writeLog('files_external', 'writeback called on ' . $tmpFile . ' ' . self::$tmpFiles[$tmpFile], \OCP\Util::WARN);
+        if (!isset(self::$tmpFiles[$tmpFile])) {
+            return false;
+        }
+        $stream = new Stream(fopen($tmpFile, 'r'));
+        $this->getContainer()->createObject(['name' => self::$tmpFiles[$tmpFile], 'stream' => $stream]);
+        $this->objectCache->remove(self::$tmpFiles[$tmpFile]);
+        unlink($tmpFile);
+    }
 
 	public function hasUpdated($path, $time) {
 		if ($this->is_file($path)) {
@@ -593,7 +597,7 @@ class Swift extends Common {
 		}
 		$path = $this->normalizePath($path);
 		$dh = $this->opendir($path);
-		$content = array();
+		$content = [];
 		while (($file = readdir($dh)) !== false) {
 			$content[] = $file;
 		}
@@ -609,9 +613,6 @@ class Swift extends Common {
 		return $cachedNames != $content;
 	}
 
-	/**
-	 * @todo - Is this just technical debt?
-	 */
 	public static function checkDependencies() {
 		return true;
 	}
